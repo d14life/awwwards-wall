@@ -8,7 +8,7 @@
   :root{
     --bg:#0b0b0c; --panel:#131315; --line:#232327;
     --fg:#f2f2f3; --dim:#8b8b93; --accent:#d6ff3f;
-    --cols:6;
+    --cols:3;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--fg);
@@ -69,7 +69,7 @@
     <span class="count" id="count">loading…</span>
     <span class="spacer"></span>
     <label class="slider">size
-      <input type="range" id="cols" min="2" max="14" value="6">
+      <input type="range" id="cols" min="1" max="12" value="3">
     </label>
     <button class="ctl" id="toggle">Pause all</button>
   </div>
@@ -149,6 +149,13 @@ function render() {
   }
   grid.appendChild(frag);
 }
+
+// Chrome pauses muted video-only media whenever the tab goes to the background.
+// Without this the wall comes back frozen after every tab switch.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || paused) return;
+  for (const v of grid.querySelectorAll('video')) if (v.src) v.play().catch(() => {});
+});
 
 lb.addEventListener('close', () => { lbVideo.pause(); lbVideo.removeAttribute('src'); });
 lb.addEventListener('click', e => { if (e.target === lb) lb.close(); });
