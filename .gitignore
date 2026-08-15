@@ -1,0 +1,7 @@
+videos/
+*.log
+*.part
+*.tmp.mp4
+folder.html
+emb.html
+.DS_Store

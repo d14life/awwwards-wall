@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Awwwards Pack — video wall</title>
+<style>
+  :root{
+    --bg:#0b0b0c; --panel:#131315; --line:#232327;
+    --fg:#f2f2f3; --dim:#8b8b93; --accent:#d6ff3f;
+    --cols:6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.4 ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+
+  header{position:sticky;top:0;z-index:20;background:rgba(11,11,12,.88);
+    backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:18px;padding:12px 18px;flex-wrap:wrap}
+  h1{font-size:13px;margin:0;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+  .count{color:var(--dim);font-variant-numeric:tabular-nums}
+  .spacer{flex:1}
+
+  .chips{display:flex;gap:6px;padding:0 18px 12px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:transparent;color:var(--dim);
+    padding:5px 11px;border-radius:100px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .chip:hover{color:var(--fg);border-color:#3a3a40}
+  .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
+    color:#111;font-weight:600}
+
+  button.ctl{border:1px solid var(--line);background:var(--panel);color:var(--fg);
+    padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer}
+  button.ctl:hover{border-color:#3a3a40}
+  label.slider{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px}
+  input[type=range]{width:130px;accent-color:var(--accent)}
+
+  .grid{display:grid;grid-template-columns:repeat(var(--cols),1fr);gap:10px;padding:10px}
+  .tile{margin:0;display:flex;flex-direction:column;gap:5px;min-width:0}
+  .shot{position:relative;aspect-ratio:16/10;background:var(--panel);
+    border-radius:6px;overflow:hidden;cursor:zoom-in}
+  .shot video{width:100%;height:100%;object-fit:cover;display:block;opacity:0;
+    transition:opacity .35s ease}
+  .shot video.on{opacity:1}
+  .shot:hover{outline:1.5px solid var(--accent);outline-offset:-1.5px}
+
+  figcaption{display:flex;align-items:baseline;gap:8px;font-size:11px;
+    color:var(--dim);min-width:0}
+  figcaption .n{color:#cfcfd4;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:1;min-width:0}
+  figcaption a{color:var(--accent);text-decoration:none;white-space:nowrap;
+    border-bottom:1px solid transparent}
+  figcaption a:hover{border-bottom-color:var(--accent)}
+
+  dialog{border:0;padding:0;background:transparent;max-width:92vw;max-height:92vh}
+  dialog::backdrop{background:rgba(6,6,7,.93)}
+  dialog video{max-width:92vw;max-height:84vh;border-radius:8px;display:block;background:#000}
+  dialog .meta{color:var(--dim);font-size:12px;padding:12px 2px 0;
+    display:flex;gap:16px;align-items:baseline}
+  dialog .meta a{color:var(--accent);text-decoration:none}
+  dialog .meta a:hover{text-decoration:underline}
+  .empty{padding:60px 18px;color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>Awwwards Pack</h1>
+    <span class="count" id="count">loading…</span>
+    <span class="spacer"></span>
+    <label class="slider">size
+      <input type="range" id="cols" min="2" max="14" value="6">
+    </label>
+    <button class="ctl" id="toggle">Pause all</button>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<main class="grid" id="grid"></main>
+
+<dialog id="lightbox">
+  <video controls loop playsinline></video>
+  <div class="meta">
+    <span id="lb-name"></span>
+    <a id="lb-code" href="#" target="_blank" rel="noopener">open code folder ↗</a>
+  </div>
+</dialog>
+
+<script>
+const grid = document.getElementById('grid');
+const chips = document.getElementById('chips');
+const countEl = document.getElementById('count');
+const lb = document.getElementById('lightbox');
+const lbVideo = lb.querySelector('video');
+const lbCode = document.getElementById('lb-code');
+let items = [], filter = 'all', paused = false;
+
+const label = c => c.replace(/-/g, ' ').replace(/\b\w/g, m => m.toUpperCase());
+
+// Load and play only what is near the viewport, unload what scrolled away.
+// Without this, ~290 decoders at once stalls the tab.
+const io = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const v = e.target;
+    if (e.isIntersecting) {
+      if (!v.src) v.src = v.dataset.src;
+      if (!paused) v.play().catch(() => {});
+    } else if (v.src) {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+      v.classList.remove('on');
+    }
+  }
+}, { rootMargin: '600px 0px' });
+
+function render() {
+  io.disconnect();
+  grid.innerHTML = '';
+  const shown = items.filter(i => filter === 'all' || i.cat === filter);
+  countEl.textContent = `${shown.length} clips`;
+  if (!shown.length) {
+    grid.innerHTML = '<p class="empty">No videos in videos.json yet.</p>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const it of shown) {
+    const fig = document.createElement('figure');
+    fig.className = 'tile';
+    fig.innerHTML = `<div class="shot">
+        <video muted loop playsinline preload="none"></video>
+      </div>
+      <figcaption>
+        <span class="n">${label(it.cat)} · ${it.num}</span>
+        <a href="${it.code}" target="_blank" rel="noopener">code ↗</a>
+      </figcaption>`;
+    const v = fig.querySelector('video');
+    v.dataset.src = it.src;
+    v.addEventListener('playing', () => v.classList.add('on'));
+    fig.querySelector('.shot').onclick = () => {
+      lbVideo.src = it.src;
+      document.getElementById('lb-name').textContent = `${label(it.cat)} · ${it.num}`;
+      lbCode.href = it.code;
+      lb.showModal();
+      lbVideo.play().catch(() => {});
+    };
+    frag.appendChild(fig);
+    io.observe(v);
+  }
+  grid.appendChild(frag);
+}
+
+lb.addEventListener('close', () => { lbVideo.pause(); lbVideo.removeAttribute('src'); });
+lb.addEventListener('click', e => { if (e.target === lb) lb.close(); });
+
+document.getElementById('cols').oninput = e =>
+  document.documentElement.style.setProperty('--cols', e.target.value);
+
+document.getElementById('toggle').onclick = e => {
+  paused = !paused;
+  e.target.textContent = paused ? 'Play all' : 'Pause all';
+  for (const v of grid.querySelectorAll('video')) {
+    if (paused) v.pause(); else if (v.src) v.play().catch(() => {});
+  }
+};
+
+fetch('videos.json').then(r => r.json()).then(data => {
+  items = data;
+  const cats = ['all', ...new Set(items.map(i => i.cat))];
+  chips.innerHTML = cats.map(c =>
+    `<button class="chip" data-cat="${c}" aria-pressed="${c === 'all'}">${
+      c === 'all' ? `All (${items.length})` : label(c)}</button>`).join('');
+  chips.onclick = e => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    filter = b.dataset.cat;
+    for (const c of chips.children) c.setAttribute('aria-pressed', c === b);
+    render();
+    scrollTo({ top: 0 });
+  };
+  render();
+}).catch(() => { countEl.textContent = 'videos.json missing — run make_manifest.py'; });
+</script>
+</body>
+</html>
