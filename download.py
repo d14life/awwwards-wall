@@ -29,8 +29,11 @@ def fetch(f):
     # a Drive error page is HTML, not video — never let one land as a .mp4.
     # Drive serves .webm as application/octet-stream, so allow that too.
     ok_type = ctype.startswith('video') or ctype.startswith('application/octet-stream')
-    if code != '200' or not ok_type or os.path.getsize(tmp) < 10_000:
-        os.remove(tmp)
+    # curl leaves no file at all when it never connects, so check before stat
+    size = os.path.getsize(tmp) if os.path.exists(tmp) else 0
+    if code != '200' or not ok_type or size < 10_000:
+        if os.path.exists(tmp):
+            os.remove(tmp)
         return ('FAIL', f'{path} http={code} type={ctype}')
     os.rename(tmp, path)
     return ('ok', path)
